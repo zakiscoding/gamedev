@@ -26,6 +26,7 @@ namespace Cmis3150.Fps.Player
         PlayerInputReader _input;
         Vector3 _velocity;
         float _pitch;
+        float _stepTimer;
 
         public Transform LookCamera => lookCamera;
         public bool IsGrounded => _cc != null && _cc.isGrounded;
@@ -77,6 +78,17 @@ namespace Cmis3150.Fps.Player
             _velocity.y += gravity * Time.deltaTime;
             Vector3 motion = wish.normalized * speed + Vector3.up * _velocity.y;
             _cc.Move(motion * Time.deltaTime);
+
+            // Footstep sound events while walking/running on the ground.
+            if (_cc.isGrounded && move.sqrMagnitude > 0.01f)
+            {
+                _stepTimer -= Time.deltaTime;
+                if (_stepTimer <= 0f)
+                {
+                    _stepTimer = _input.SprintHeld ? 0.3f : 0.5f;
+                    Core.GameEvents.RaiseFootstep(_input.SprintHeld);
+                }
+            }
         }
     }
 }

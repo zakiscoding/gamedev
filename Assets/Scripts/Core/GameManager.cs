@@ -37,7 +37,7 @@ namespace Cmis3150.Fps.Core
         {
             GameEvents.RaiseLives(Lives);
             GameEvents.RaiseKills(Kills);
-            GameEvents.RaiseTreasure(0, totalTreasures);
+            GameEvents.RaiseTreasureCount(0, totalTreasures);
         }
 
         public void RegisterGuard()
@@ -51,6 +51,8 @@ namespace Cmis3150.Fps.Core
             Kills++;
             GameEvents.RaiseKills(Kills);
             GameEvents.RaiseGuardDied();
+            if (AllTreasuresTaken && GuardsAlive > 0)
+                GameEvents.RaiseStatus($"{GuardsAlive} guard(s) left.");
             CheckWin();
         }
 
@@ -62,7 +64,14 @@ namespace Cmis3150.Fps.Core
             if (TreasuresCollected >= totalTreasures && !AllTreasuresTaken)
             {
                 AllTreasuresTaken = true;
-                // Remaining guards flee — handled via AllTreasuresCollected event in GuardAI.
+                // Remaining guards flee — handled via the AllTreasuresCollected event in GuardAI.
+                GameEvents.RaiseStatus(GuardsAlive > 0
+                    ? $"All treasure taken! Hunt down the {GuardsAlive} fleeing guard(s)."
+                    : "All treasure taken!");
+            }
+            else if (!AllTreasuresTaken)
+            {
+                GameEvents.RaiseStatus($"Treasure stolen! {totalTreasures - TreasuresCollected} left. Its guards are hunting you!");
             }
 
             CheckWin();
@@ -83,6 +92,7 @@ namespace Cmis3150.Fps.Core
             if (IsGameOver) return;
             Lives = Mathf.Min(maxLives, Lives + amount);
             GameEvents.RaiseLives(Lives);
+            GameEvents.RaiseStatus("Health kit: +1 life");
         }
 
         void CheckWin()

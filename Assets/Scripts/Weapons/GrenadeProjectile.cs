@@ -6,32 +6,36 @@ using Cmis3150.Fps.Player;
 namespace Cmis3150.Fps.Weapons
 {
     /// <summary>
-    /// Thrown grenade: explodes on impact or after fuse. One hit kills guards (damage >= max HP).
+    /// Thrown grenade: explodes shortly after it first hits something (or when the fuse runs out).
+    /// One explosion kills any guard in the radius (damage 99 &gt; guard HP 3).
     /// </summary>
     public class GrenadeProjectile : MonoBehaviour
     {
-        [SerializeField] float fuseSeconds = 2.2f;
+        [SerializeField] float fuseSeconds = 2.5f;
         [SerializeField] float explodeRadius = 3.5f;
         [SerializeField] int damageToGuards = 99;
         [SerializeField] int damageToPlayer = 1;
-        [SerializeField] bool harmPlayer = false; // optional friendly fire off by default
+        [SerializeField] bool harmPlayer = false;
 
         bool _armed;
         bool _exploded;
+        Material _explosionMat;
+
+        public void SetExplosionMaterial(Material m) => _explosionMat = m;
 
         public void Arm()
         {
             _armed = true;
-            Destroy(gameObject, fuseSeconds + 0.05f);
             Invoke(nameof(Explode), fuseSeconds);
         }
 
         void OnCollisionEnter(Collision collision)
         {
             if (!_armed || _exploded) return;
-            // Explode shortly after first bounce for juicier feel
+            // Direct hit on a guard → explode immediately, otherwise after a short bounce.
             CancelInvoke(nameof(Explode));
-            Invoke(nameof(Explode), 0.05f);
+            bool hitGuard = collision.collider.GetComponentInParent<GuardHealth>() != null;
+            Invoke(nameof(Explode), hitGuard ? 0f : 0.4f);
         }
 
         void Explode()
@@ -39,8 +43,9 @@ namespace Cmis3150.Fps.Weapons
             if (_exploded) return;
             _exploded = true;
             GameEvents.RaiseGrenadeExploded();
+            SpawnExplosionVisual();
 
-            var hits = Physics.OverlapSphere(transform.position, explodeRadius);
+            var hits = Physics.OverlapSphere(transform.position, explodeRadius, ~0, QueryTriggerInteraction.Ignore);
             foreach (var col in hits)
             {
                 var guard = col.GetComponentInParent<GuardHealth>();
@@ -58,6 +63,21 @@ namespace Cmis3150.Fps.Weapons
             }
 
             Destroy(gameObject);
+        }
+
+        void SpawnExplosionVisual()
+        {
+            var fx = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            fx.name = "ExplosionFX";
+            Destroy(fx.GetComponent<Collider>());
+            fx.transform.position = transform.position;
+            if (_explosionMat != null) fx.GetComponent<MeshRenderer>().sharedMaterial = _explosionMat;
+            var l = fx.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.color = new Color(1f, 0.6f, 0.2f);
+            l.range = explodeRadius * 3f;
+            l.intensity = 6f;
+            fx.AddComponent<ExplosionFx>().Init(explodeRadius * 2f, 0.35f);
         }
     }
 }

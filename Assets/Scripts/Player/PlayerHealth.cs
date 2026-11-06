@@ -9,7 +9,7 @@ namespace Cmis3150.Fps.Player
     /// </summary>
     public class PlayerHealth : MonoBehaviour
     {
-        [SerializeField] float invulnSeconds = 0.6f;
+        [SerializeField] float invulnSeconds = 1.0f;
         float _invulnUntil;
 
         public void TakeDamage(int amount = 1)

@@ -1,53 +1,76 @@
 #if UNITY_EDITOR
+using System.IO;
 using UnityEditor;
+using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using Cmis3150.Fps.Core;
 
 namespace Cmis3150.Fps.EditorTools
 {
     /// <summary>
-    /// Menu helpers for opening the bootstrapped level and reminding about Windows builds.
+    /// Editor menu + batch-mode entry points.
+    ///  CMIS3150 → Build Level In Scene : generates MainLevel.unity from LevelBootstrap, bakes the NavMeshSurface, saves.
+    ///  CMIS3150 → Build Windows Player : builds Builds/Windows/Project2FPS.exe
+    /// Batch: Unity.exe -batchmode -quit -projectPath . -executeMethod Cmis3150.Fps.EditorTools.ProjectSetupMenu.BatchBuildAll
     /// </summary>
     public static class ProjectSetupMenu
     {
         const string ScenePath = "Assets/Scenes/MainLevel.unity";
+        const string BuildPath = "Builds/Windows/Project2FPS.exe";
 
         [MenuItem("CMIS3150/Open Main Level")]
         public static void OpenMainLevel()
         {
-            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
-                return;
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             EditorSceneManager.OpenScene(ScenePath);
         }
 
-        [MenuItem("CMIS3150/Create Bootstrap Object In Active Scene")]
-        public static void EnsureBootstrap()
+        [MenuItem("CMIS3150/Build Level In Scene")]
+        public static void BuildLevelInScene()
         {
-            if (Object.FindFirstObjectByType<LevelBootstrap>() != null)
-            {
-                Debug.Log("LevelBootstrap already present.");
-                return;
-            }
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             var go = new GameObject("LevelBootstrap");
-            go.AddComponent<LevelBootstrap>();
-            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-            Selection.activeGameObject = go;
-            Debug.Log("Added LevelBootstrap. Press Play — the level builds itself and bakes a NavMesh at runtime.");
+            var lb = go.AddComponent<LevelBootstrap>();
+            lb.Build();
+            Object.DestroyImmediate(go); // the generated objects stay; the generator is not needed at runtime
+
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            AssetDatabase.SaveAssets();
+            Debug.Log("[CMIS3150] Level generated, NavMesh baked, scene saved: " + ScenePath);
         }
 
-        [MenuItem("CMIS3150/Print Windows Build Checklist")]
-        public static void BuildChecklist()
+        [MenuItem("CMIS3150/Build Windows Player")]
+        public static void BuildWindows()
         {
-            Debug.Log(
-                "Windows standalone checklist:\n" +
-                "1) Unity Hub → install Windows Build Support (Mono) for this Editor.\n" +
-                "2) Edit → Project Settings → Player → Active Input Handling = Input System Package (or Both).\n" +
-                "3) File → Build Profiles → Windows → Build.\n" +
-                "4) Zip the whole build folder (exe + _Data), not just the .exe.\n" +
-                "5) Record gameplay (win+fail) and ≤15 min narrated code walkthrough (zone→chase→shoot→patrol).");
+            PlayerSettings.productName = "Project2FPS";
+            PlayerSettings.companyName = "CMIS3150";
+            PlayerSettings.fullScreenMode = FullScreenMode.FullScreenWindow;
+            PlayerSettings.SetScriptingBackend(UnityEditor.Build.NamedBuildTarget.Standalone, ScriptingImplementation.Mono2x);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(BuildPath));
+            var opts = new BuildPlayerOptions
+            {
+                scenes = new[] { ScenePath },
+                locationPathName = BuildPath,
+                target = BuildTarget.StandaloneWindows64,
+                options = BuildOptions.None
+            };
+            BuildReport report = BuildPipeline.BuildPlayer(opts);
+            Debug.Log($"[CMIS3150] Build result: {report.summary.result}, errors: {report.summary.totalErrors}, size: {report.summary.totalSize}");
+            if (Application.isBatchMode && report.summary.result != BuildResult.Succeeded)
+                EditorApplication.Exit(1);
+        }
+
+        public static void BatchBuildLevel() => BuildLevelInScene();
+
+        public static void BatchBuildAll()
+        {
+            BuildLevelInScene();
+            BuildWindows();
         }
     }
 }
